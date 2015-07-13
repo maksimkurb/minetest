@@ -48,6 +48,8 @@ struct MapDrawControl;
 class MtEventManager;
 struct PointedThing;
 class Database;
+class Mapper;
+struct MinimapMapblock;
 
 struct QueuedMeshUpdate
 {
@@ -111,22 +113,26 @@ struct MeshUpdateResult
 	}
 };
 
-class MeshUpdateThread : public JThread
+class MeshUpdateThread : public UpdateThread
 {
+private:
+	MeshUpdateQueue m_queue_in;
+
+protected:
+	const char *getName()
+	{ return "MeshUpdateThread"; }
+	virtual void doUpdate();
+
 public:
 
-	MeshUpdateThread(IGameDef *gamedef):
-		m_gamedef(gamedef)
+	MeshUpdateThread()
 	{
 	}
 
-	void * Thread();
-
-	MeshUpdateQueue m_queue_in;
+	void enqueueUpdate(v3s16 p, MeshMakeData *data,
+			bool ack_block_to_server, bool urgent);
 
 	MutexedQueue<MeshUpdateResult> m_queue_out;
-
-	IGameDef *m_gamedef;
 
 	v3s16 m_camera_offset;
 };
@@ -351,6 +357,8 @@ public:
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Hello(NetworkPacket* pkt);
 	void handleCommand_AuthAccept(NetworkPacket* pkt);
+	void handleCommand_AcceptSudoMode(NetworkPacket* pkt);
+	void handleCommand_DenySudoMode(NetworkPacket* pkt);
 	void handleCommand_InitLegacy(NetworkPacket* pkt);
 	void handleCommand_AccessDenied(NetworkPacket* pkt);
 	void handleCommand_RemoveNode(NetworkPacket* pkt);
@@ -391,6 +399,7 @@ public:
 	void handleCommand_OverrideDayNightRatio(NetworkPacket* pkt);
 	void handleCommand_LocalPlayerAnimations(NetworkPacket* pkt);
 	void handleCommand_EyeOffset(NetworkPacket* pkt);
+	void handleCommand_SrpBytesSandB(NetworkPacket* pkt);
 
 	void ProcessData(NetworkPacket *pkt);
 
@@ -402,13 +411,13 @@ public:
 	void interact(u8 action, const PointedThing& pointed);
 
 	void sendNodemetaFields(v3s16 p, const std::string &formname,
-			const std::map<std::string, std::string> &fields);
+		const StringMap &fields);
 	void sendInventoryFields(const std::string &formname,
-			const std::map<std::string, std::string> &fields);
+		const StringMap &fields);
 	void sendInventoryAction(InventoryAction *a);
 	void sendChatMessage(const std::wstring &message);
-	void sendChangePassword(const std::wstring &oldpassword,
-	                        const std::wstring &newpassword);
+	void sendChangePassword(const std::string &oldpassword,
+		const std::string &newpassword);
 	void sendDamage(u8 damage);
 	void sendBreath(u16 breath);
 	void sendRespawn();
@@ -490,6 +499,9 @@ public:
 	bool mediaReceived()
 	{ return m_media_downloader == NULL; }
 
+	u8 getProtoVersion()
+	{ return m_proto_ver; }
+
 	float mediaReceiveProgress();
 
 	void afterContentReceived(IrrlichtDevice *device);
@@ -497,6 +509,9 @@ public:
 	float getRTT(void);
 	float getCurRate(void);
 	float getAvgRate(void);
+
+	Mapper* getMapper ()
+	{ return m_mapper; }
 
 	// IGameDef interface
 	virtual IItemDefManager* getItemDefManager();
@@ -542,10 +557,20 @@ private:
 	// Send the item number 'item' as player item to the server
 	void sendPlayerItem(u16 item);
 
+	void deleteAuthData();
+	// helper method shared with clientpackethandler
+	static AuthMechanism choseAuthMech(const u32 mechs);
+
 	void sendLegacyInit(const char* playerName, const char* playerPassword);
+	void sendInit(const std::string &playerName);
+	void startAuth(AuthMechanism chosen_auth_mechanism);
 	void sendDeletedBlocks(std::vector<v3s16> &blocks);
 	void sendGotBlocks(v3s16 block);
 	void sendRemovedSounds(std::vector<s32> &soundList);
+
+	// Helper function
+	inline std::string getPlayerName()
+	{ return m_env.getLocalPlayer()->getName(); }
 
 	float m_packetcounter_timer;
 	float m_connection_reinit_timer;
@@ -567,13 +592,21 @@ private:
 	ParticleManager m_particle_manager;
 	con::Connection m_con;
 	IrrlichtDevice *m_device;
+	Mapper *m_mapper;
 	// Server serialization version
 	u8 m_server_ser_ver;
+
+	// Used version of the protocol with server
+	// Values smaller than 25 only mean they are smaller than 25,
+	// and aren't accurate. We simply just don't know, because
+	// the server didn't send the version back then.
+	// If 0, server init hasn't been received yet.
+	u8 m_proto_ver;
+
 	u16 m_playeritem;
 	bool m_inventory_updated;
 	Inventory *m_inventory_from_server;
 	float m_inventory_from_server_age;
-	std::set<v3s16> m_active_blocks;
 	PacketCounter m_packetcounter;
 	bool m_show_highlighted;
 	// Block mesh animation parameters
@@ -585,9 +618,23 @@ private:
 	//s32 m_daynight_i;
 	//u32 m_daynight_ratio;
 	std::queue<std::wstring> m_chat_queue;
+
+	// The authentication methods we can use to enter sudo mode (=change password)
+	u32 m_sudo_auth_methods;
+
 	// The seed returned by the server in TOCLIENT_INIT is stored here
 	u64 m_map_seed;
+
+	// Auth data
+	std::string m_playername;
 	std::string m_password;
+	// If set, this will be sent (and cleared) upon a TOCLIENT_ACCEPT_SUDO_MODE
+	std::string m_new_password;
+	// Usable by auth mechanisms.
+	AuthMechanism m_chosen_auth_mech;
+	void * m_auth_data;
+
+
 	bool m_access_denied;
 	std::string m_access_denied_reason;
 	std::queue<ClientEvent> m_client_event_queue;
@@ -620,7 +667,7 @@ private:
 	std::map<std::string, Inventory*> m_detached_inventories;
 
 	// Storage for mesh data for creating multiple instances of the same mesh
-	std::map<std::string, std::string> m_mesh_data;
+	StringMap m_mesh_data;
 
 	// own state
 	LocalClientState m_state;

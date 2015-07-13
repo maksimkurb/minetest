@@ -22,12 +22,6 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 
 #include "lua_api/l_base.h"
 
-class INodeDefManager;
-struct NodeResolveInfo;
-class DecoSimple;
-class DecoSchematic;
-class SchematicManager;
-
 class ModApiMapgen : public ModApiBase {
 private:
 	// get_mapgen_object(objectname)
@@ -45,8 +39,14 @@ private:
 	// set_noiseparam_defaults(name, noiseparams, set_default)
 	static int l_set_noiseparams(lua_State *L);
 
+	// get_noiseparam_defaults(name)
+	static int l_get_noiseparams(lua_State *L);
+
 	// set_gen_notify(flagstring)
 	static int l_set_gen_notify(lua_State *L);
+
+	// set_gen_notify(flagstring)
+	static int l_get_gen_notify(lua_State *L);
 
 	// register_biome({lots of stuff})
 	static int l_register_biome(lua_State *L);
@@ -84,6 +84,9 @@ private:
 	// place_schematic(p, schematic, rotation, replacement)
 	static int l_place_schematic(lua_State *L);
 
+	// serialize_schematic(schematic, format, options={...})
+	static int l_serialize_schematic(lua_State *L);
+
 public:
 	static void Initialize(lua_State *L, int top);
 
@@ -92,6 +95,8 @@ public:
 	static struct EnumString es_MapgenObject[];
 	static struct EnumString es_OreType[];
 	static struct EnumString es_Rotation[];
+	static struct EnumString es_SchematicFormatType[];
+	static struct EnumString es_NodeResolveMethod[];
 };
 
 #endif /* L_MAPGEN_H_ */

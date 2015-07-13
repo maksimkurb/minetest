@@ -33,6 +33,7 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 #include "exceptions.h"
 #include "debug.h"
 #include "gamedef.h"
+#include <fstream> // Used in applyTextureOverrides()
 
 /*
 	NodeBox
@@ -201,6 +202,7 @@ void ContentFeatures::reset()
 #ifndef SERVER
 	for(u32 i = 0; i < 24; i++)
 		mesh_ptr[i] = NULL;
+	minimap_color = video::SColor(0, 0, 0, 0);
 #endif
 	visual_scale = 1.0;
 	for(u32 i = 0; i < 6; i++)
@@ -241,7 +243,7 @@ void ContentFeatures::reset()
 	sound_dug = SimpleSoundSpec();
 }
 
-void ContentFeatures::serialize(std::ostream &os, u16 protocol_version)
+void ContentFeatures::serialize(std::ostream &os, u16 protocol_version) const
 {
 	if(protocol_version < 24){
 		serializeOld(os, protocol_version);
@@ -397,23 +399,20 @@ public:
 	virtual content_t set(const std::string &name, const ContentFeatures &def);
 	virtual content_t allocateDummy(const std::string &name);
 	virtual void updateAliases(IItemDefManager *idef);
+	virtual void applyTextureOverrides(const std::string &override_filepath);
 	virtual void updateTextures(IGameDef *gamedef,
-	/*argument: */void (*progress_callback)(void *progress_args, u32 progress, u32 max_progress),
-	/*argument: */void *progress_callback_args);
-	void serialize(std::ostream &os, u16 protocol_version);
+		void (*progress_cbk)(void *progress_args, u32 progress, u32 max_progress),
+		void *progress_cbk_args);
+	void serialize(std::ostream &os, u16 protocol_version) const;
 	void deSerialize(std::istream &is);
 
 	inline virtual bool getNodeRegistrationStatus() const;
 	inline virtual void setNodeRegistrationStatus(bool completed);
 
-	virtual void pendNodeResolve(NodeResolveInfo *nri);
-	virtual void cancelNodeResolve(NodeResolver *resolver);
-	virtual void runNodeResolverCallbacks();
-
-	virtual bool getIdFromResolveInfo(NodeResolveInfo *nri,
-		const std::string &node_alt, content_t c_fallback, content_t &result);
-	virtual bool getIdsFromResolveInfo(NodeResolveInfo *nri,
-		std::vector<content_t> &result);
+	virtual void pendNodeResolve(NodeResolver *nr);
+	virtual bool cancelNodeResolveCallback(NodeResolver *nr);
+	virtual void runNodeResolveCallbacks();
+	virtual void resetNodeResolveState();
 
 private:
 	void addNameIdMapping(content_t i, std::string name);
@@ -443,8 +442,8 @@ private:
 	// Next possibly free id
 	content_t m_next_id;
 
-	// List of node strings and node resolver callbacks to perform
-	std::list<NodeResolveInfo *> m_pending_node_lookups;
+	// NodeResolvers to callback once node registration has ended
+	std::vector<NodeResolver *> m_pending_resolve_callbacks;
 
 	// True when all nodes have been registered
 	bool m_node_registration_complete;
@@ -479,13 +478,7 @@ void CNodeDefManager::clear()
 	m_group_to_items.clear();
 	m_next_id = 0;
 
-	m_node_registration_complete = false;
-	for (std::list<NodeResolveInfo *>::iterator
-			it = m_pending_node_lookups.begin();
-			it != m_pending_node_lookups.end();
-			++it)
-		delete *it;
-	m_pending_node_lookups.clear();
+	resetNodeResolveState();
 
 	u32 initial_length = 0;
 	initial_length = MYMAX(initial_length, CONTENT_UNKNOWN + 1);
@@ -680,7 +673,7 @@ content_t CNodeDefManager::set(const std::string &name, const ContentFeatures &d
 			j = m_group_to_items.find(group_name);
 		if (j == m_group_to_items.end()) {
 			m_group_to_items[group_name].push_back(
-					std::make_pair(id, i->second));
+				std::make_pair(id, i->second));
 		} else {
 			GroupItems &items = j->second;
 			items.push_back(std::make_pair(id, i->second));
@@ -710,11 +703,69 @@ void CNodeDefManager::updateAliases(IItemDefManager *idef)
 		content_t id;
 		if (m_name_id_mapping.getId(convert_to, id)) {
 			m_name_id_mapping_with_aliases.insert(
-					std::make_pair(name, id));
+				std::make_pair(name, id));
 		}
 	}
 }
 
+void CNodeDefManager::applyTextureOverrides(const std::string &override_filepath)
+{
+	infostream << "CNodeDefManager::applyTextureOverrides(): Applying "
+		"overrides to textures from " << override_filepath << std::endl;
+
+	std::ifstream infile(override_filepath.c_str());
+	std::string line;
+	int line_c = 0;
+	while (std::getline(infile, line)) {
+		line_c++;
+		if (trim(line) == "")
+			continue;
+		std::vector<std::string> splitted = str_split(line, ' ');
+		if (splitted.size() != 3) {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Syntax error" << std::endl;
+			continue;
+		}
+
+		content_t id;
+		if (!getId(splitted[0], id)) {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Unknown node \""
+				<< splitted[0] << "\"" << std::endl;
+			continue;
+		}
+
+		ContentFeatures &nodedef = m_content_features[id];
+
+		if (splitted[1] == "top")
+			nodedef.tiledef[0].name = splitted[2];
+		else if (splitted[1] == "bottom")
+			nodedef.tiledef[1].name = splitted[2];
+		else if (splitted[1] == "right")
+			nodedef.tiledef[2].name = splitted[2];
+		else if (splitted[1] == "left")
+			nodedef.tiledef[3].name = splitted[2];
+		else if (splitted[1] == "back")
+			nodedef.tiledef[4].name = splitted[2];
+		else if (splitted[1] == "front")
+			nodedef.tiledef[5].name = splitted[2];
+		else if (splitted[1] == "all" || splitted[1] == "*")
+			for (int i = 0; i < 6; i++)
+				nodedef.tiledef[i].name = splitted[2];
+		else if (splitted[1] == "sides")
+			for (int i = 2; i < 6; i++)
+				nodedef.tiledef[i].name = splitted[2];
+		else {
+			errorstream << override_filepath
+				<< ":" << line_c << " Could not apply texture override \""
+				<< line << "\": Unknown node side \""
+				<< splitted[1] << "\"" << std::endl;
+			continue;
+		}
+	}
+}
 
 void CNodeDefManager::updateTextures(IGameDef *gamedef,
 	void (*progress_callback)(void *progress_args, u32 progress, u32 max_progress),
@@ -723,20 +774,20 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 #ifndef SERVER
 	infostream << "CNodeDefManager::updateTextures(): Updating "
 		"textures in node definitions" << std::endl;
-
 	ITextureSource *tsrc = gamedef->tsrc();
 	IShaderSource *shdsrc = gamedef->getShaderSource();
 	scene::ISceneManager* smgr = gamedef->getSceneManager();
 	scene::IMeshManipulator* meshmanip = smgr->getMeshManipulator();
 
 	bool new_style_water           = g_settings->getBool("new_style_water");
-	bool new_style_leaves          = g_settings->getBool("new_style_leaves");
 	bool connected_glass           = g_settings->getBool("connected_glass");
 	bool opaque_water              = g_settings->getBool("opaque_water");
 	bool enable_shaders            = g_settings->getBool("enable_shaders");
 	bool enable_bumpmapping        = g_settings->getBool("enable_bumpmapping");
 	bool enable_parallax_occlusion = g_settings->getBool("enable_parallax_occlusion");
 	bool enable_mesh_cache         = g_settings->getBool("enable_mesh_cache");
+	bool enable_minimap            = g_settings->getBool("enable_minimap");
+	std::string leaves_style       = g_settings->get("leaves_style");
 
 	bool use_normal_texture = enable_shaders &&
 		(enable_bumpmapping || enable_parallax_occlusion);
@@ -745,6 +796,10 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 
 	for (u32 i = 0; i < size; i++) {
 		ContentFeatures *f = &m_content_features[i];
+
+		// minimap pixel color - the average color of a texture
+		if (enable_minimap && f->tiledef[0].name != "")
+			f->minimap_color = tsrc->getTextureAverageColor(f->tiledef[0].name);
 
 		// Figure out the actual tiles to use
 		TileDef tiledef[6];
@@ -805,8 +860,16 @@ void CNodeDefManager::updateTextures(IGameDef *gamedef,
 			f->visual_solidness = 1;
 			break;
 		case NDT_ALLFACES_OPTIONAL:
-			if (new_style_leaves) {
+			if (leaves_style == "fancy") {
 				f->drawtype = NDT_ALLFACES;
+				f->solidness = 0;
+				f->visual_solidness = 1;
+			} else if (leaves_style == "simple") {
+				for (u32 j = 0; j < 6; j++) {
+					if (f->tiledef_special[j].name != "")
+						tiledef[j].name = f->tiledef_special[j].name;
+				}
+				f->drawtype = NDT_GLASSLIKE;
 				f->solidness = 0;
 				f->visual_solidness = 1;
 			} else {
@@ -982,7 +1045,7 @@ void CNodeDefManager::fillTileAttribs(ITextureSource *tsrc, TileSpec *tile,
 #endif
 
 
-void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version)
+void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version) const
 {
 	writeU8(os, 1); // version
 	u16 count = 0;
@@ -991,7 +1054,7 @@ void CNodeDefManager::serialize(std::ostream &os, u16 protocol_version)
 		if (i == CONTENT_IGNORE || i == CONTENT_AIR
 				|| i == CONTENT_UNKNOWN)
 			continue;
-		ContentFeatures *f = &m_content_features[i];
+		const ContentFeatures *f = &m_content_features[i];
 		if (f->name == "")
 			continue;
 		writeU16(os2, i);
@@ -1072,7 +1135,7 @@ IWritableNodeDefManager *createNodeDefManager()
 
 
 //// Serialization of old ContentFeatures formats
-void ContentFeatures::serializeOld(std::ostream &os, u16 protocol_version)
+void ContentFeatures::serializeOld(std::ostream &os, u16 protocol_version) const
 {
 	if (protocol_version == 13)
 	{
@@ -1304,114 +1367,152 @@ inline void CNodeDefManager::setNodeRegistrationStatus(bool completed)
 }
 
 
-void CNodeDefManager::pendNodeResolve(NodeResolveInfo *nri)
+void CNodeDefManager::pendNodeResolve(NodeResolver *nr)
 {
-	nri->resolver->m_ndef = this;
-	if (m_node_registration_complete) {
-		nri->resolver->resolveNodeNames(nri);
-		nri->resolver->m_lookup_done = true;
-		delete nri;
-	} else {
-		m_pending_node_lookups.push_back(nri);
-	}
+	nr->m_ndef = this;
+	if (m_node_registration_complete)
+		nr->nodeResolveInternal();
+	else
+		m_pending_resolve_callbacks.push_back(nr);
 }
 
 
-void CNodeDefManager::cancelNodeResolve(NodeResolver *resolver)
+bool CNodeDefManager::cancelNodeResolveCallback(NodeResolver *nr)
 {
-	for (std::list<NodeResolveInfo *>::iterator
-			it = m_pending_node_lookups.begin();
-			it != m_pending_node_lookups.end();
-			++it) {
-		NodeResolveInfo *nri = *it;
-		if (resolver == nri->resolver) {
-			it = m_pending_node_lookups.erase(it);
-			delete nri;
-		}
+	size_t len = m_pending_resolve_callbacks.size();
+	for (size_t i = 0; i != len; i++) {
+		if (nr != m_pending_resolve_callbacks[i])
+			continue;
+
+		len--;
+		m_pending_resolve_callbacks[i] = m_pending_resolve_callbacks[len];
+		m_pending_resolve_callbacks.resize(len);
+		return true;
 	}
+
+	return false;
 }
 
 
-void CNodeDefManager::runNodeResolverCallbacks()
+void CNodeDefManager::runNodeResolveCallbacks()
 {
-	while (!m_pending_node_lookups.empty()) {
-		NodeResolveInfo *nri = m_pending_node_lookups.front();
-		m_pending_node_lookups.pop_front();
-		nri->resolver->resolveNodeNames(nri);
-		nri->resolver->m_lookup_done = true;
-		delete nri;
+	for (size_t i = 0; i != m_pending_resolve_callbacks.size(); i++) {
+		NodeResolver *nr = m_pending_resolve_callbacks[i];
+		nr->nodeResolveInternal();
 	}
+
+	m_pending_resolve_callbacks.clear();
 }
 
 
-bool CNodeDefManager::getIdFromResolveInfo(NodeResolveInfo *nri,
-	const std::string &node_alt, content_t c_fallback, content_t &result)
+void CNodeDefManager::resetNodeResolveState()
 {
-	if (nri->nodenames.empty()) {
-		result = c_fallback;
-		errorstream << "Resolver empty nodename list" << std::endl;
+	m_node_registration_complete = false;
+	m_pending_resolve_callbacks.clear();
+}
+
+
+////
+//// NodeResolver
+////
+
+NodeResolver::NodeResolver()
+{
+	m_ndef            = NULL;
+	m_nodenames_idx   = 0;
+	m_nnlistsizes_idx = 0;
+	m_resolve_done    = false;
+
+	m_nodenames.reserve(16);
+	m_nnlistsizes.reserve(4);
+}
+
+
+NodeResolver::~NodeResolver()
+{
+	if (!m_resolve_done && m_ndef)
+		m_ndef->cancelNodeResolveCallback(this);
+}
+
+
+void NodeResolver::nodeResolveInternal()
+{
+	m_nodenames_idx   = 0;
+	m_nnlistsizes_idx = 0;
+
+	resolveNodeNames();
+	m_resolve_done = true;
+
+	m_nodenames.clear();
+	m_nnlistsizes.clear();
+}
+
+
+bool NodeResolver::getIdFromNrBacklog(content_t *result_out,
+	const std::string &node_alt, content_t c_fallback)
+{
+	if (m_nodenames_idx == m_nodenames.size()) {
+		*result_out = c_fallback;
+		errorstream << "NodeResolver: no more nodes in list" << std::endl;
 		return false;
 	}
 
 	content_t c;
-	std::string name = nri->nodenames.front();
-	nri->nodenames.pop_front();
+	std::string name = m_nodenames[m_nodenames_idx++];
 
-	bool success = getId(name, c);
+	bool success = m_ndef->getId(name, c);
 	if (!success && node_alt != "") {
 		name = node_alt;
-		success = getId(name, c);
+		success = m_ndef->getId(name, c);
 	}
 
 	if (!success) {
-		errorstream << "Resolver: Failed to resolve node name '" << name
+		errorstream << "NodeResolver: failed to resolve node name '" << name
 			<< "'." << std::endl;
 		c = c_fallback;
 	}
 
-	result = c;
+	*result_out = c;
 	return success;
 }
 
 
-bool CNodeDefManager::getIdsFromResolveInfo(NodeResolveInfo *nri,
-	std::vector<content_t> &result)
+bool NodeResolver::getIdsFromNrBacklog(std::vector<content_t> *result_out,
+	bool all_required, content_t c_fallback)
 {
 	bool success = true;
 
-	if (nri->nodelistinfo.empty()) {
-		errorstream << "Resolver: Empty nodelistinfo list" << std::endl;
+	if (m_nnlistsizes_idx == m_nnlistsizes.size()) {
+		errorstream << "NodeResolver: no more node lists" << std::endl;
 		return false;
 	}
 
-	NodeListInfo listinfo = nri->nodelistinfo.front();
-	nri->nodelistinfo.pop_front();
+	size_t length = m_nnlistsizes[m_nnlistsizes_idx++];
 
-	while (listinfo.length--) {
-		if (nri->nodenames.empty()) {
-			errorstream << "Resolver: Empty nodename list" << std::endl;
+	while (length--) {
+		if (m_nodenames_idx == m_nodenames.size()) {
+			errorstream << "NodeResolver: no more nodes in list" << std::endl;
 			return false;
 		}
 
 		content_t c;
-		std::string name = nri->nodenames.front();
-		nri->nodenames.pop_front();
+		std::string &name = m_nodenames[m_nodenames_idx++];
 
 		if (name.substr(0,6) != "group:") {
-			if (getId(name, c)) {
-				result.push_back(c);
-			} else if (listinfo.all_required) {
-				errorstream << "Resolver: Failed to resolve node name '" << name
-					<< "'." << std::endl;
-				result.push_back(listinfo.c_fallback);
+			if (m_ndef->getId(name, c)) {
+				result_out->push_back(c);
+			} else if (all_required) {
+				errorstream << "NodeResolver: failed to resolve node name '"
+					<< name << "'." << std::endl;
+				result_out->push_back(c_fallback);
 				success = false;
 			}
 		} else {
 			std::set<content_t> cids;
 			std::set<content_t>::iterator it;
-			getIds(name, cids);
+			m_ndef->getIds(name, cids);
 			for (it = cids.begin(); it != cids.end(); ++it)
-				result.push_back(*it);
+				result_out->push_back(*it);
 		}
 	}
 

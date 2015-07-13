@@ -193,7 +193,6 @@ public:
 	void handleCommand_Null(NetworkPacket* pkt) {};
 	void handleCommand_Deprecated(NetworkPacket* pkt);
 	void handleCommand_Init(NetworkPacket* pkt);
-	void handleCommand_Auth(NetworkPacket* pkt);
 	void handleCommand_Init_Legacy(NetworkPacket* pkt);
 	void handleCommand_Init2(NetworkPacket* pkt);
 	void handleCommand_RequestMedia(NetworkPacket* pkt);
@@ -213,6 +212,9 @@ public:
 	void handleCommand_RemovedSounds(NetworkPacket* pkt);
 	void handleCommand_NodeMetaFields(NetworkPacket* pkt);
 	void handleCommand_InventoryFields(NetworkPacket* pkt);
+	void handleCommand_FirstSrp(NetworkPacket* pkt);
+	void handleCommand_SrpBytesA(NetworkPacket* pkt);
+	void handleCommand_SrpBytesM(NetworkPacket* pkt);
 
 	void ProcessData(NetworkPacket *pkt);
 
@@ -265,11 +267,11 @@ public:
 	void spawnParticle(const char *playername,
 		v3f pos, v3f velocity, v3f acceleration,
 		float expirationtime, float size,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture);
 
 	void spawnParticleAll(v3f pos, v3f velocity, v3f acceleration,
 		float expirationtime, float size,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture);
 
 	u32 addParticleSpawner(const char *playername,
 		u16 amount, float spawntime,
@@ -278,7 +280,7 @@ public:
 		v3f minacc, v3f maxacc,
 		float minexptime, float maxexptime,
 		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture);
 
 	u32 addParticleSpawnerAll(u16 amount, float spawntime,
 		v3f minpos, v3f maxpos,
@@ -286,7 +288,7 @@ public:
 		v3f minacc, v3f maxacc,
 		float minexptime, float maxexptime,
 		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture);
+		bool collisiondetection, bool vertical, const std::string &texture);
 
 	void deleteParticleSpawner(const char *playername, u32 id);
 	void deleteParticleSpawnerAll(u32 id);
@@ -296,9 +298,6 @@ public:
 
 	// Envlock and conlock should be locked when using scriptapi
 	GameScripting *getScriptIface(){ return m_script; }
-
-	//TODO: determine what (if anything) should be locked to access EmergeManager
-	EmergeManager *getEmergeManager(){ return m_emerge; }
 
 	// actions: time-reversed list
 	// Return value: success/failure
@@ -317,16 +316,16 @@ public:
 	virtual MtEventManager* getEventManager();
 	virtual scene::ISceneManager* getSceneManager();
 	virtual IRollbackManager *getRollbackManager() { return m_rollback; }
-
+	virtual EmergeManager *getEmergeManager() { return m_emerge; }
 
 	IWritableItemDefManager* getWritableItemDefManager();
 	IWritableNodeDefManager* getWritableNodeDefManager();
 	IWritableCraftDefManager* getWritableCraftDefManager();
 
-	const ModSpec* getModSpec(const std::string &modname);
+	const ModSpec* getModSpec(const std::string &modname) const;
 	void getModNames(std::vector<std::string> &modlist);
 	std::string getBuiltinLuaPath();
-	inline std::string getWorldPath()
+	inline std::string getWorldPath() const
 			{ return m_path_world; }
 
 	inline bool isSingleplayer()
@@ -344,8 +343,11 @@ public:
 	bool hudChange(Player *player, u32 id, HudElementStat stat, void *value);
 	bool hudSetFlags(Player *player, u32 flags, u32 mask);
 	bool hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount);
+	s32 hudGetHotbarItemcount(Player *player);
 	void hudSetHotbarImage(Player *player, std::string name);
+	std::string hudGetHotbarImage(Player *player);
 	void hudSetHotbarSelectedImage(Player *player, std::string name);
+	std::string hudGetHotbarSelectedImage(Player *player);
 
 	inline Address getPeerAddress(u16 peer_id)
 			{ return m_con.GetPeerAddress(peer_id); }
@@ -363,14 +365,16 @@ public:
 	void peerAdded(con::Peer *peer);
 	void deletingPeer(con::Peer *peer, bool timeout);
 
-	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason=NULL);
+	void DenySudoAccess(u16 peer_id);
+	void DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason="");
+	void acceptAuth(u16 peer_id, bool forSudoMode);
 	void DenyAccess_Legacy(u16 peer_id, const std::wstring &reason);
 	bool getClientConInfo(u16 peer_id, con::rtt_stat_type type,float* retval);
 	bool getClientInfo(u16 peer_id,ClientState* state, u32* uptime,
 			u8* ser_vers, u16* prot_vers, u8* major, u8* minor, u8* patch,
 			std::string* vers_string);
 
-	void SendPlayerHPOrDie(u16 peer_id, bool die) { die ? DiePlayer(peer_id) : SendPlayerHP(peer_id); }
+	void SendPlayerHPOrDie(PlayerSAO *player);
 	void SendPlayerBreath(u16 peer_id);
 	void SendInventory(PlayerSAO* playerSAO);
 	void SendMovePlayer(u16 peer_id);
@@ -386,7 +390,7 @@ private:
 	void SendMovement(u16 peer_id);
 	void SendHP(u16 peer_id, u8 hp);
 	void SendBreath(u16 peer_id, u16 breath);
-	void SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason);
+	void SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason);
 	void SendAccessDenied_Legacy(u16 peer_id, const std::wstring &reason);
 	void SendDeathscreen(u16 peer_id,bool set_camera_point_target, v3f camera_point_target);
 	void SendItemDef(u16 peer_id,IItemDefManager *itemdef, u16 protocol_version);

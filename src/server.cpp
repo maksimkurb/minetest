@@ -239,11 +239,9 @@ Server::Server(
 	m_mods = modconf.getMods();
 	std::vector<ModSpec> unsatisfied_mods = modconf.getUnsatisfiedMods();
 	// complain about mods with unsatisfied dependencies
-	if(!modconf.isConsistent())
-	{
+	if(!modconf.isConsistent()) {
 		for(std::vector<ModSpec>::iterator it = unsatisfied_mods.begin();
-			it != unsatisfied_mods.end(); ++it)
-		{
+			it != unsatisfied_mods.end(); ++it) {
 			ModSpec mod = *it;
 			errorstream << "mod \"" << mod.name << "\" has unsatisfied dependencies: ";
 			for(std::set<std::string>::iterator dep_it = mod.unsatisfied_depends.begin();
@@ -259,8 +257,7 @@ Server::Server(
 	std::vector<std::string> names = worldmt_settings.getNames();
 	std::set<std::string> load_mod_names;
 	for(std::vector<std::string>::iterator it = names.begin();
-		it != names.end(); ++it)
-	{
+		it != names.end(); ++it) {
 		std::string name = *it;
 		if(name.compare(0,9,"load_mod_")==0 && worldmt_settings.getBool(name))
 			load_mod_names.insert(name.substr(9));
@@ -272,8 +269,7 @@ Server::Server(
 	for(std::vector<ModSpec>::iterator it = unsatisfied_mods.begin();
 			it != unsatisfied_mods.end(); ++it)
 		load_mod_names.erase((*it).name);
-	if(!load_mod_names.empty())
-	{
+	if(!load_mod_names.empty()) {
 		errorstream << "The following mods could not be found:";
 		for(std::set<std::string>::iterator it = load_mod_names.begin();
 			it != load_mod_names.end(); ++it)
@@ -295,31 +291,41 @@ Server::Server(
 
 	m_script = new GameScripting(this);
 
-	std::string scriptpath = getBuiltinLuaPath() + DIR_DELIM "init.lua";
+	std::string script_path = getBuiltinLuaPath() + DIR_DELIM "init.lua";
+	std::string error_msg;
 
-	if (!m_script->loadScript(scriptpath))
-		throw ModError("Failed to load and run " + scriptpath);
+	if (!m_script->loadMod(script_path, BUILTIN_MOD_NAME, &error_msg))
+		throw ModError("Failed to load and run " + script_path
+				+ "\nError from Lua:\n" + error_msg);
 
-	// Print 'em
-	infostream<<"Server: Loading mods: ";
+	// Print mods
+	infostream << "Server: Loading mods: ";
 	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
+			i != m_mods.end(); i++) {
 		const ModSpec &mod = *i;
-		infostream<<mod.name<<" ";
+		infostream << mod.name << " ";
 	}
-	infostream<<std::endl;
+	infostream << std::endl;
 	// Load and run "mod" scripts
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
+	for (std::vector<ModSpec>::iterator i = m_mods.begin();
+			i != m_mods.end(); i++) {
 		const ModSpec &mod = *i;
-		std::string scriptpath = mod.path + DIR_DELIM + "init.lua";
-		infostream<<"  ["<<padStringRight(mod.name, 12)<<"] [\""
-				<<scriptpath<<"\"]"<<std::endl;
-		bool success = m_script->loadMod(scriptpath, mod.name);
-		if(!success){
-			errorstream<<"Server: Failed to load and run "
-					<<scriptpath<<std::endl;
-			throw ModError("Failed to load and run "+scriptpath);
+		if (!string_allowed(mod.name, MODNAME_ALLOWED_CHARS)) {
+			std::ostringstream err;
+			err << "Error loading mod \"" << mod.name
+					<< "\": mod_name does not follow naming conventions: "
+					<< "Only chararacters [a-z0-9_] are allowed." << std::endl;
+			errorstream << err.str().c_str();
+			throw ModError(err.str());
+		}
+		std::string script_path = mod.path + DIR_DELIM "init.lua";
+		infostream << "  [" << padStringRight(mod.name, 12) << "] [\""
+				<< script_path << "\"]" << std::endl;
+		if (!m_script->loadMod(script_path, mod.name, &error_msg)) {
+			errorstream << "Server: Failed to load and run "
+					<< script_path << std::endl;
+			throw ModError("Failed to load and run " + script_path
+					+ "\nError from Lua:\n" + error_msg);
 		}
 	}
 
@@ -329,10 +335,15 @@ Server::Server(
 	// Apply item aliases in the node definition manager
 	m_nodedef->updateAliases(m_itemdef);
 
+	// Apply texture overrides from texturepack/override.txt
+	std::string texture_path = g_settings->get("texture_path");
+	if (texture_path != "" && fs::IsDir(texture_path))
+		m_nodedef->applyTextureOverrides(texture_path + DIR_DELIM + "override.txt");
+
 	m_nodedef->setNodeRegistrationStatus(true);
 
 	// Perform pending node name resolutions
-	m_nodedef->runNodeResolverCallbacks();
+	m_nodedef->runNodeResolveCallbacks();
 
 	// init the recipe hashes to speed up crafting
 	m_craftdef->initHashes(this);
@@ -1067,16 +1078,16 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 		static_cast<RemotePlayer*>(m_env->getPlayer(playername.c_str()));
 
 	// If failed, cancel
-	if((playersao == NULL) || (player == NULL)) {
-		if(player && player->peer_id != 0) {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<" (player allocated to an another client)"<<std::endl;
+	if ((playersao == NULL) || (player == NULL)) {
+		if (player && player->peer_id != 0) {
+			actionstream << "Server: Failed to emerge player \"" << playername
+					<< "\" (player allocated to an another client)" << std::endl;
 			DenyAccess_Legacy(peer_id, L"Another client is connected with this "
 					L"name. If your client closed unexpectedly, try again in "
 					L"a minute.");
 		} else {
-			errorstream<<"Server: "<<playername<<": Failed to emerge player"
-					<<std::endl;
+			errorstream << "Server: " << playername << ": Failed to emerge player"
+					<< std::endl;
 			DenyAccess_Legacy(peer_id, L"Could not allocate player.");
 		}
 		return NULL;
@@ -1097,7 +1108,7 @@ PlayerSAO* Server::StageTwoClientInit(u16 peer_id)
 	SendInventory(playersao);
 
 	// Send HP
-	SendPlayerHPOrDie(peer_id, playersao->getHP() == 0);
+	SendPlayerHPOrDie(playersao);
 
 	// Send Breath
 	SendPlayerBreath(peer_id);
@@ -1172,7 +1183,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 					<< ban_name << std::endl;
 			// This actually doesn't seem to transfer to the client
 			DenyAccess_Legacy(peer_id, L"Your ip is banned. Banned name was "
-					+ narrow_to_wide(ban_name));
+					+ utf8_to_wide(ban_name));
 			return;
 		}
 	}
@@ -1195,6 +1206,7 @@ void Server::ProcessData(NetworkPacket *pkt)
 		if (command >= TOSERVER_NUM_MSG_TYPES) {
 			infostream << "Server: Ignoring unknown command "
 					 << command << std::endl;
+			return;
 		}
 
 		if (toServerCommandTable[command].state == TOSERVER_STATE_NOT_CONNECTED) {
@@ -1227,9 +1239,12 @@ void Server::ProcessData(NetworkPacket *pkt)
 		}
 
 		handleCommand(pkt);
-	}
-	catch(SendFailedException &e) {
+	} catch (SendFailedException &e) {
 		errorstream << "Server::ProcessData(): SendFailedException: "
+				<< "what=" << e.what()
+				<< std::endl;
+	} catch (PacketError &e) {
+		actionstream << "Server::ProcessData(): PacketError: "
 				<< "what=" << e.what()
 				<< std::endl;
 	}
@@ -1472,6 +1487,20 @@ void Server::SendMovement(u16 peer_id)
 	Send(&pkt);
 }
 
+void Server::SendPlayerHPOrDie(PlayerSAO *playersao)
+{
+	if (!g_settings->getBool("enable_damage"))
+		return;
+
+	u16 peer_id   = playersao->getPeerID();
+	bool is_alive = playersao->getHP() > 0;
+
+	if (is_alive)
+		SendPlayerHP(peer_id);
+	else
+		DiePlayer(peer_id);
+}
+
 void Server::SendHP(u16 peer_id, u8 hp)
 {
 	DSTACK(__FUNCTION_NAME);
@@ -1490,7 +1519,7 @@ void Server::SendBreath(u16 peer_id, u16 breath)
 	Send(&pkt);
 }
 
-void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason)
+void Server::SendAccessDenied(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
 	DSTACK(__FUNCTION_NAME);
 
@@ -1802,7 +1831,11 @@ void Server::SendPlayerHP(u16 peer_id)
 {
 	DSTACK(__FUNCTION_NAME);
 	PlayerSAO *playersao = getPlayerSAO(peer_id);
-	assert(playersao);
+	// In some rare case, if the player is disconnected
+	// while Lua call l_punch, for example, this can be NULL
+	if (!playersao)
+		return;
+
 	SendHP(peer_id, playersao->getHP());
 	m_script->player_event(playersao,"health_changed");
 
@@ -1911,7 +1944,7 @@ void Server::SendActiveObjectMessages(u16 peer_id, const std::string &datas, boo
 	pkt.putRawString(datas.c_str(), datas.size());
 
 	m_clients.send(pkt.getPeerId(),
-			clientCommandFactoryTable[pkt.getCommand()].channel,
+			reliable ? clientCommandFactoryTable[pkt.getCommand()].channel : 1,
 			&pkt, reliable);
 
 }
@@ -2530,8 +2563,15 @@ void Server::RespawnPlayer(u16 peer_id)
 		playersao->setPos(pos);
 	}
 }
+void Server::DenySudoAccess(u16 peer_id)
+{
+	DSTACK(__FUNCTION_NAME);
 
-void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::wstring &custom_reason)
+	NetworkPacket pkt(TOCLIENT_DENY_SUDO_MODE, 0, peer_id);
+	Send(&pkt);
+}
+
+void Server::DenyAccess(u16 peer_id, AccessDeniedCode reason, const std::string &custom_reason)
 {
 	DSTACK(__FUNCTION_NAME);
 
@@ -2549,6 +2589,37 @@ void Server::DenyAccess_Legacy(u16 peer_id, const std::wstring &reason)
 	SendAccessDenied_Legacy(peer_id, reason);
 	m_clients.event(peer_id, CSE_SetDenied);
 	m_con.DisconnectPeer(peer_id);
+}
+
+void Server::acceptAuth(u16 peer_id, bool forSudoMode)
+{
+	DSTACK(__FUNCTION_NAME);
+
+	if (!forSudoMode) {
+		RemoteClient* client = getClient(peer_id, CS_Invalid);
+
+		NetworkPacket resp_pkt(TOCLIENT_AUTH_ACCEPT, 1 + 6 + 8 + 4, peer_id);
+
+		// Right now, the auth mechs don't change between login and sudo mode.
+		u32 sudo_auth_mechs = client->allowed_auth_mechs;
+		client->allowed_sudo_mechs = sudo_auth_mechs;
+
+		resp_pkt << v3f(0,0,0) << (u64) m_env->getServerMap().getSeed()
+				<< g_settings->getFloat("dedicated_server_step")
+				<< sudo_auth_mechs;
+
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_AuthAccept);
+	} else {
+		NetworkPacket resp_pkt(TOCLIENT_ACCEPT_SUDO_MODE, 1 + 6 + 8 + 4, peer_id);
+
+		// We only support SRP right now
+		u32 sudo_auth_mechs = AUTH_MECHANISM_FIRST_SRP;
+
+		resp_pkt << sudo_auth_mechs;
+		Send(&resp_pkt);
+		m_clients.event(peer_id, CSE_SudoSuccess);
+	}
 }
 
 void Server::DeleteClient(u16 peer_id, ClientDeletionReason reason)
@@ -2642,7 +2713,8 @@ void Server::UpdateCrafting(Player* player)
 	ItemStack preview;
 	InventoryLocation loc;
 	loc.setPlayer(player->getName());
-	getCraftingResult(&player->inventory, preview, false, this);
+	std::vector<ItemStack> output_replacements;
+	getCraftingResult(&player->inventory, preview, output_replacements, false, this);
 	m_env->getScriptIface()->item_CraftPredict(preview, player->getPlayerSAO(), (&player->inventory)->getList("craft"), loc);
 
 	// Put the new preview in
@@ -2780,7 +2852,7 @@ std::string Server::getBanDescription(const std::string &ip_or_name)
 void Server::notifyPlayer(const char *name, const std::wstring &msg)
 {
 	Player *player = m_env->getPlayer(name);
-	if(!player)
+	if (!player)
 		return;
 
 	if (player->peer_id == PEER_ID_INEXISTENT)
@@ -2789,21 +2861,19 @@ void Server::notifyPlayer(const char *name, const std::wstring &msg)
 	SendChatMessage(player->peer_id, msg);
 }
 
-bool Server::showFormspec(const char *playername, const std::string &formspec, const std::string &formname)
+bool Server::showFormspec(const char *playername, const std::string &formspec,
+	const std::string &formname)
 {
 	Player *player = m_env->getPlayer(playername);
-
-	if(!player)
-	{
-		infostream<<"showFormspec: couldn't find player:"<<playername<<std::endl;
+	if (!player)
 		return false;
-	}
 
 	SendShowFormspecMessage(player->peer_id, formspec, formname);
 	return true;
 }
 
-u32 Server::hudAdd(Player *player, HudElement *form) {
+u32 Server::hudAdd(Player *player, HudElement *form)
+{
 	if (!player)
 		return -1;
 
@@ -2829,7 +2899,8 @@ bool Server::hudRemove(Player *player, u32 id) {
 	return true;
 }
 
-bool Server::hudChange(Player *player, u32 id, HudElementStat stat, void *data) {
+bool Server::hudChange(Player *player, u32 id, HudElementStat stat, void *data)
+{
 	if (!player)
 		return false;
 
@@ -2837,7 +2908,8 @@ bool Server::hudChange(Player *player, u32 id, HudElementStat stat, void *data) 
 	return true;
 }
 
-bool Server::hudSetFlags(Player *player, u32 flags, u32 mask) {
+bool Server::hudSetFlags(Player *player, u32 flags, u32 mask)
+{
 	if (!player)
 		return false;
 
@@ -2853,37 +2925,67 @@ bool Server::hudSetFlags(Player *player, u32 flags, u32 mask) {
 	return true;
 }
 
-bool Server::hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount) {
+bool Server::hudSetHotbarItemcount(Player *player, s32 hotbar_itemcount)
+{
 	if (!player)
 		return false;
 	if (hotbar_itemcount <= 0 || hotbar_itemcount > HUD_HOTBAR_ITEMCOUNT_MAX)
 		return false;
 
+	player->setHotbarItemcount(hotbar_itemcount);
 	std::ostringstream os(std::ios::binary);
 	writeS32(os, hotbar_itemcount);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_ITEMCOUNT, os.str());
 	return true;
 }
 
-void Server::hudSetHotbarImage(Player *player, std::string name) {
+s32 Server::hudGetHotbarItemcount(Player *player)
+{
+	if (!player)
+		return 0;
+	return player->getHotbarItemcount();
+}
+
+void Server::hudSetHotbarImage(Player *player, std::string name)
+{
 	if (!player)
 		return;
 
+	player->setHotbarImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_IMAGE, name);
 }
 
-void Server::hudSetHotbarSelectedImage(Player *player, std::string name) {
+std::string Server::hudGetHotbarImage(Player *player)
+{
+	if (!player)
+		return "";
+	return player->getHotbarImage();
+}
+
+void Server::hudSetHotbarSelectedImage(Player *player, std::string name)
+{
 	if (!player)
 		return;
 
+	player->setHotbarSelectedImage(name);
 	SendHUDSetParam(player->peer_id, HUD_PARAM_HOTBAR_SELECTED_IMAGE, name);
 }
 
-bool Server::setLocalPlayerAnimations(Player *player, v2s32 animation_frames[4], f32 frame_speed)
+std::string Server::hudGetHotbarSelectedImage(Player *player)
+{
+	if (!player)
+		return "";
+
+	return player->getHotbarSelectedImage();
+}
+
+bool Server::setLocalPlayerAnimations(Player *player,
+	v2s32 animation_frames[4], f32 frame_speed)
 {
 	if (!player)
 		return false;
 
+	player->setLocalAnimations(animation_frames, frame_speed);
 	SendLocalPlayerAnimations(player->peer_id, animation_frames, frame_speed);
 	return true;
 }
@@ -2893,26 +2995,30 @@ bool Server::setPlayerEyeOffset(Player *player, v3f first, v3f third)
 	if (!player)
 		return false;
 
+	player->eye_offset_first = first;
+	player->eye_offset_third = third;
 	SendEyeOffset(player->peer_id, first, third);
 	return true;
 }
 
 bool Server::setSky(Player *player, const video::SColor &bgcolor,
-		const std::string &type, const std::vector<std::string> &params)
+	const std::string &type, const std::vector<std::string> &params)
 {
 	if (!player)
 		return false;
 
+	player->setSky(bgcolor, type, params);
 	SendSetSky(player->peer_id, bgcolor, type, params);
 	return true;
 }
 
 bool Server::overrideDayNightRatio(Player *player, bool do_override,
-		float ratio)
+	float ratio)
 {
 	if (!player)
 		return false;
 
+	player->overrideDayNightRatio(do_override, ratio);
 	SendOverrideDayNightRatio(player->peer_id, do_override, ratio);
 	return true;
 }
@@ -2923,9 +3029,9 @@ void Server::notifyPlayers(const std::wstring &msg)
 }
 
 void Server::spawnParticle(const char *playername, v3f pos,
-		v3f velocity, v3f acceleration,
-		float expirationtime, float size, bool
-		collisiondetection, bool vertical, std::string texture)
+	v3f velocity, v3f acceleration,
+	float expirationtime, float size, bool
+	collisiondetection, bool vertical, const std::string &texture)
 {
 	Player *player = m_env->getPlayer(playername);
 	if(!player)
@@ -2935,21 +3041,17 @@ void Server::spawnParticle(const char *playername, v3f pos,
 }
 
 void Server::spawnParticleAll(v3f pos, v3f velocity, v3f acceleration,
-		float expirationtime, float size,
-		bool collisiondetection, bool vertical, std::string texture)
+	float expirationtime, float size,
+	bool collisiondetection, bool vertical, const std::string &texture)
 {
 	SendSpawnParticle(PEER_ID_INEXISTENT,pos, velocity, acceleration,
 			expirationtime, size, collisiondetection, vertical, texture);
 }
 
-u32 Server::addParticleSpawner(const char *playername,
-		u16 amount, float spawntime,
-		v3f minpos, v3f maxpos,
-		v3f minvel, v3f maxvel,
-		v3f minacc, v3f maxacc,
-		float minexptime, float maxexptime,
-		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture)
+u32 Server::addParticleSpawner(const char *playername, u16 amount, float spawntime,
+	v3f minpos, v3f maxpos, v3f minvel, v3f maxvel, v3f minacc, v3f maxacc,
+	float minexptime, float maxexptime, float minsize, float maxsize,
+	bool collisiondetection, bool vertical, const std::string &texture)
 {
 	Player *player = m_env->getPlayer(playername);
 	if(!player)
@@ -2977,12 +3079,12 @@ u32 Server::addParticleSpawner(const char *playername,
 }
 
 u32 Server::addParticleSpawnerAll(u16 amount, float spawntime,
-		v3f minpos, v3f maxpos,
-		v3f minvel, v3f maxvel,
-		v3f minacc, v3f maxacc,
-		float minexptime, float maxexptime,
-		float minsize, float maxsize,
-		bool collisiondetection, bool vertical, std::string texture)
+	v3f minpos, v3f maxpos,
+	v3f minvel, v3f maxvel,
+	v3f minacc, v3f maxacc,
+	float minexptime, float maxexptime,
+	float minsize, float maxsize,
+	bool collisiondetection, bool vertical, const std::string &texture)
 {
 	u32 id = 0;
 	for(;;) // look for unused particlespawner id
@@ -3043,24 +3145,6 @@ Inventory* Server::createDetachedInventory(const std::string &name)
 	return inv;
 }
 
-class BoolScopeSet
-{
-public:
-	BoolScopeSet(bool *dst, bool val):
-		m_dst(dst)
-	{
-		m_orig_state = *m_dst;
-		*m_dst = val;
-	}
-	~BoolScopeSet()
-	{
-		*m_dst = m_orig_state;
-	}
-private:
-	bool *m_dst;
-	bool m_orig_state;
-};
-
 // actions: time-reversed list
 // Return value: success/failure
 bool Server::rollbackRevertActions(const std::list<RollbackAction> &actions,
@@ -3110,27 +3194,29 @@ bool Server::rollbackRevertActions(const std::list<RollbackAction> &actions,
 
 // IGameDef interface
 // Under envlock
-IItemDefManager* Server::getItemDefManager()
+IItemDefManager *Server::getItemDefManager()
 {
 	return m_itemdef;
 }
-INodeDefManager* Server::getNodeDefManager()
+
+INodeDefManager *Server::getNodeDefManager()
 {
 	return m_nodedef;
 }
-ICraftDefManager* Server::getCraftDefManager()
+
+ICraftDefManager *Server::getCraftDefManager()
 {
 	return m_craftdef;
 }
-ITextureSource* Server::getTextureSource()
+ITextureSource *Server::getTextureSource()
 {
 	return NULL;
 }
-IShaderSource* Server::getShaderSource()
+IShaderSource *Server::getShaderSource()
 {
 	return NULL;
 }
-scene::ISceneManager* Server::getSceneManager()
+scene::ISceneManager *Server::getSceneManager()
 {
 	return NULL;
 }
@@ -3139,44 +3225,50 @@ u16 Server::allocateUnknownNodeId(const std::string &name)
 {
 	return m_nodedef->allocateDummy(name);
 }
-ISoundManager* Server::getSoundManager()
+
+ISoundManager *Server::getSoundManager()
 {
 	return &dummySoundManager;
 }
-MtEventManager* Server::getEventManager()
+
+MtEventManager *Server::getEventManager()
 {
 	return m_event;
 }
 
-IWritableItemDefManager* Server::getWritableItemDefManager()
+IWritableItemDefManager *Server::getWritableItemDefManager()
 {
 	return m_itemdef;
 }
-IWritableNodeDefManager* Server::getWritableNodeDefManager()
+
+IWritableNodeDefManager *Server::getWritableNodeDefManager()
 {
 	return m_nodedef;
 }
-IWritableCraftDefManager* Server::getWritableCraftDefManager()
+
+IWritableCraftDefManager *Server::getWritableCraftDefManager()
 {
 	return m_craftdef;
 }
 
-const ModSpec* Server::getModSpec(const std::string &modname)
+const ModSpec *Server::getModSpec(const std::string &modname) const
 {
-	for(std::vector<ModSpec>::iterator i = m_mods.begin();
-			i != m_mods.end(); i++){
-		const ModSpec &mod = *i;
-		if(mod.name == modname)
+	std::vector<ModSpec>::const_iterator it;
+	for (it = m_mods.begin(); it != m_mods.end(); ++it) {
+		const ModSpec &mod = *it;
+		if (mod.name == modname)
 			return &mod;
 	}
 	return NULL;
 }
+
 void Server::getModNames(std::vector<std::string> &modlist)
 {
-	for(std::vector<ModSpec>::iterator i = m_mods.begin(); i != m_mods.end(); i++) {
-		modlist.push_back(i->name);
-	}
+	std::vector<ModSpec>::iterator it;
+	for (it = m_mods.begin(); it != m_mods.end(); ++it)
+		modlist.push_back(it->name);
 }
+
 std::string Server::getBuiltinLuaPath()
 {
 	return porting::path_share + DIR_DELIM + "builtin";
@@ -3346,5 +3438,3 @@ void dedicated_server_loop(Server &server, bool &kill)
 		}
 	}
 }
-
-

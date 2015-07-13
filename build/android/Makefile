@@ -118,11 +118,25 @@ CURL_TIMESTAMP = $(CURL_DIR)/timestamp
 CURL_TIMESTAMP_INT = $(ROOT)/deps/curl_timestamp
 CURL_URL_HTTP = http://curl.haxx.se/download/curl-${CURL_VERSION}.tar.bz2
 
+GMP_VERSION = 6.0.0
+GMP_DIR = $(ROOT)/deps/gmp-$(GMP_VERSION)
+GMP_LIB = $(GMP_DIR)/usr/lib/libgmp.so
+GMP_TIMESTAMP = $(GMP_DIR)/timestamp
+GMP_TIMESTAMP_INT = $(ROOT)/deps/gmp_timestamp
+GMP_URL_HTTP = https://gmplib.org/download/gmp/gmp-$(GMP_VERSION).tar.bz2
+
 FREETYPE_DIR = $(ROOT)/deps/freetype2-android/
 FREETYPE_LIB = $(FREETYPE_DIR)/Android/obj/local/$(TARGET_ABI)/libfreetype2-static.a
 FREETYPE_TIMESTAMP = $(FREETYPE_DIR)timestamp
 FREETYPE_TIMESTAMP_INT = $(ROOT)/deps/freetype_timestamp
 FREETYPE_URL_GIT = https://github.com/cdave1/freetype2-android
+
+ICONV_VERSION = 1.14
+ICONV_DIR = $(ROOT)/deps/libiconv/
+ICONV_LIB = $(ICONV_DIR)/iconv.so
+ICONV_TIMESTAMP = $(ICONV_DIR)timestamp
+ICONV_TIMESTAMP_INT = $(ROOT)/deps/iconv_timestamp
+ICONV_URL_HTTP = http://ftp.gnu.org/pub/gnu/libiconv/libiconv-$(ICONV_VERSION).tar.gz
 
 SQLITE3_FOLDER = sqlite-amalgamation-3080704
 SQLITE3_URL = http://www.sqlite.org/2014/$(SQLITE3_FOLDER).zip
@@ -148,14 +162,14 @@ endif
 	$(IRRLICHT_TIMESTAMP) $(CURL_TIMESTAMP) \
 	$(OPENSSL_TIMESTAMP) curl_binary \
 	$(ROOT)/jni/src/android_version.h
-	
+
 debug : $(PATHCFGFILE)
 	export NDEBUG=;                                                            \
 	export BUILD_TYPE=debug;                                                   \
 	$(MAKE) apk
-	
+
 all : debug release
-	
+
 release : $(PATHCFGFILE)
 	@export NDEBUG=1;                                                          \
 	export BUILD_TYPE=release;                                                 \
@@ -194,7 +208,7 @@ $(OPENAL_TIMESTAMP) : openal_download
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
 		touch ${OPENAL_TIMESTAMP};                                            \
 	fi
-	
+
 openal_download :
 	@if [ ! -d ${OPENAL_DIR} ] ; then                                          \
 		echo "openal sources missing, downloading...";                         \
@@ -202,7 +216,7 @@ openal_download :
 		cd ${ROOT}/deps ;                                                      \
 		git clone ${OPENAL_URL_GIT} || exit 1;                                 \
 	fi
-	
+
 openal : $(OPENAL_LIB)
 
 $(OPENAL_LIB): $(OPENAL_TIMESTAMP)
@@ -227,16 +241,16 @@ $(OPENAL_LIB): $(OPENAL_TIMESTAMP)
 	else                                                                       \
 		echo "nothing to be done for openal";                                  \
 	fi
-	
+
 clean_openal :
 	$(RM) -rf ${OPENAL_DIR}
-	
+
 $(OGG_TIMESTAMP) : ogg_download
 	@LAST_MODIF=$$(find ${OGG_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
 		touch ${OGG_TIMESTAMP};                                                \
 	fi
-	
+
 ogg_download :
 	@if [ ! -d ${OGG_DIR} ] ; then                                             \
 		echo "ogg sources missing, downloading...";                            \
@@ -246,7 +260,7 @@ ogg_download :
 		cd libvorbis-libogg-android ;                                          \
 		patch -p1 < ../../libvorbis-libogg-fpu.patch || exit 1;                \
 	fi
-	
+
 ogg : $(OGG_LIB)
 
 $(OGG_LIB): $(OGG_TIMESTAMP)
@@ -275,13 +289,13 @@ $(OGG_LIB): $(OGG_TIMESTAMP)
 
 clean_ogg :
 	$(RM) -rf ${OGG_DIR}
-	
+
 $(OPENSSL_TIMESTAMP) : openssl_download
 	@LAST_MODIF=$$(find ${OPENSSL_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
 		touch ${OPENSSL_TIMESTAMP};                                            \
 	fi
-	
+
 openssl_download :
 	@if [ ! -d ${OPENSSL_DIR} ] ; then                                         \
 		echo "openssl sources missing, downloading...";                        \
@@ -292,7 +306,7 @@ openssl_download :
 		cd ${OPENSSL_BASEDIR};                                                 \
 		patch -p1 < ../../openssl_arch.patch;                                  \
 	fi
-	
+
 openssl : $(OPENSSL_LIB)
 
 $(OPENSSL_LIB): $(OPENSSL_TIMESTAMP)
@@ -340,7 +354,7 @@ leveldb_download :
 		cd ${ROOT}/deps ;                                                      \
 		git clone ${LEVELDB_URL_GIT} || exit 1;                                \
 	fi
-	
+
 leveldb : $(LEVELDB_LIB)
 
 $(LEVELDB_LIB): $(LEVELDB_TIMESTAMP)
@@ -374,10 +388,10 @@ $(LEVELDB_LIB): $(LEVELDB_TIMESTAMP)
 	else                                                                       \
 		echo "nothing to be done for leveldb";                                 \
 	fi
-	
+
 clean_leveldb :
 	$(RM) -rf deps/leveldb
-	
+
 $(FREETYPE_TIMESTAMP) : freetype_download
 	@LAST_MODIF=$$(find ${FREETYPE_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
@@ -391,13 +405,7 @@ freetype_download :
 		cd deps;                                                               \
 		git clone ${FREETYPE_URL_GIT} || exit 1;                               \
 	fi
-	
-$(IRRLICHT_TIMESTAMP) : irrlicht_download
-	@LAST_MODIF=$$(find ${IRRLICHT_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${IRRLICHT_TIMESTAMP};                                           \
-	fi
-	
+
 freetype : $(FREETYPE_LIB)
 
 $(FREETYPE_LIB) : $(FREETYPE_TIMESTAMP)
@@ -426,9 +434,67 @@ $(FREETYPE_LIB) : $(FREETYPE_TIMESTAMP)
 	else                                                                       \
 		echo "nothing to be done for freetype";                                \
 	fi
-	
+
 clean_freetype :
 	$(RM) -rf ${FREETYPE_DIR}
+
+$(ICONV_TIMESTAMP) : iconv_download
+	@LAST_MODIF=$$(find ${ICONV_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
+		touch ${ICONV_TIMESTAMP};                                           \
+	fi
+
+iconv_download :
+	@if [ ! -d ${ICONV_DIR} ] ; then                                        \
+		echo "iconv sources missing, downloading...";                       \
+		mkdir -p ${ROOT}/deps;                                                 \
+		cd ${ROOT}/deps;                                                               \
+		wget ${ICONV_URL_HTTP} || exit 1;                                    \
+		tar -xzf libiconv-${ICONV_VERSION}.tar.gz || exit 1;                     \
+		rm libiconv-${ICONV_VERSION}.tar.gz;                                     \
+		ln -s libiconv-${ICONV_VERSION} libiconv;                                      \
+		cd ${ICONV_DIR};                                                                   \
+		patch -p1 < ${ROOT}/libiconv_android.patch;                                                     \
+		patch -p1 < ${ROOT}/libiconv_android_mk.patch;                                                     \
+		patch -p1 < ${ROOT}/libiconv_stdio.patch;                                                     \
+		cd jni;                                                                       \
+		ln -s .. src;                                                                         \
+	fi
+
+iconv : $(ICONV_LIB)
+
+$(ICONV_LIB) : $(ICONV_TIMESTAMP)
+	@REFRESH=0;                                                                \
+	if [ ! -e ${ICONV_TIMESTAMP_INT} ] ; then                               \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ ! -e ${ICONV_LIB} ] ; then                                         \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ ${ICONV_TIMESTAMP} -nt ${ICONV_TIMESTAMP_INT} ] ; then          \
+		REFRESH=1;                                                             \
+	fi;                                                                        \
+	if [ $$REFRESH -ne 0 ] ; then                                              \
+	mkdir -p ${ICONV_DIR};                                                  \
+	export PATH=$$PATH:${SDKFOLDER}/platform-tools:${ANDROID_NDK};             \
+	echo "changed timestamp for iconv detected building...";                \
+	cd ${ICONV_DIR};                                            \
+	./configure;                                            \
+	make;                                            \
+	export NDK_PROJECT_PATH=${ICONV_DIR};                                \
+	ndk-build NDEBUG=${NDEBUG} NDK_MODULE_PATH=${NDK_MODULE_PATH}              \
+	APP_PLATFORM=${APP_PLATFORM} APP_ABI=${TARGET_ABI}                         \
+	TARGET_CFLAGS+="${TARGET_CFLAGS_ADDON}"                                    \
+	TARGET_LDFLAGS+="${TARGET_LDFLAGS_ADDON}"                                  \
+	TARGET_CXXFLAGS+="${TARGET_CXXFLAGS_ADDON}" || exit 1;                     \
+	touch ${ICONV_TIMESTAMP};                                               \
+	touch ${ICONV_TIMESTAMP_INT};                                           \
+	else                                                                       \
+		echo "nothing to be done for iconv";                                \
+	fi
+
+clean_iconv :
+	$(RM) -rf ${ICONV_DIR}
 
 #Note: Texturehack patch is required for gpu's not supporting color format
 #      correctly. Known bad GPU:
@@ -445,6 +511,12 @@ irrlicht_download :
 		patch -p1 < ../../irrlicht-touchcount.patch || exit 1;                 \
 		patch -p1 < ../../irrlicht-back_button.patch || exit 1;                \
 		patch -p1 < ../../irrlicht-texturehack.patch || exit 1;                \
+	fi
+
+$(IRRLICHT_TIMESTAMP) : irrlicht_download
+	@LAST_MODIF=$$(find ${IRRLICHT_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
+		touch ${IRRLICHT_TIMESTAMP};                                           \
 	fi
 
 irrlicht : $(IRRLICHT_LIB)
@@ -475,10 +547,10 @@ $(IRRLICHT_LIB): $(IRRLICHT_TIMESTAMP) $(FREETYPE_LIB)
 	else                                                                       \
 		echo "nothing to be done for irrlicht";                                \
 	fi
-	
+
 clean_irrlicht :
 	$(RM) -rf deps/irrlicht
-	
+
 $(CURL_TIMESTAMP) : curl_download
 	@LAST_MODIF=$$(find ${CURL_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
@@ -535,15 +607,15 @@ $(CURL_LIB): $(CURL_TIMESTAMP) $(OPENSSL_LIB)
 	else                                                                       \
 		echo "nothing to be done for curl";                                    \
 	fi
-	
+
 clean_curl :
 	$(RM) -rf deps/curl-${CURL_VERSION}                                        \
 	$(RM) -f deps/curl
-	
-	
-curl_binary: 
+
+
+curl_binary:
 	@if [ ! -d "deps/curl-${CURL_VERSION_BINARY}" ] ; then                     \
-		echo "curl sources missing, downloading...";                           \
+		echo "curl binary missing, downloading...";                           \
 		mkdir -p ${ROOT}/deps;                                                 \
 		cd deps;                                                               \
 		wget http://curl.haxx.se/gknw.net/7.34.0/dist-android/curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz || exit 1;\
@@ -552,6 +624,64 @@ curl_binary:
 		rm curl-7.34.0-rtmp-ssh2-ssl-zlib-static-bin-android.tar.gz;           \
 	fi
 
+$(GMP_TIMESTAMP) : gmp_download
+	@LAST_MODIF=$$(find ${GMP_DIR} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
+		touch ${GMP_TIMESTAMP};                                            \
+	fi
+
+gmp_download :
+	@if [ ! -d "${GMP_DIR}" ] ; then                                           \
+		echo "gmp sources missing, downloading...";                        \
+		mkdir -p ${ROOT}/deps;                                             \
+		cd deps;                                                           \
+		wget ${GMP_URL_HTTP} || exit 1;                                    \
+		tar -xjf gmp-${GMP_VERSION}.tar.bz2 || exit 1;                     \
+		rm gmp-${GMP_VERSION}.tar.bz2;                                     \
+		ln -s gmp-${GMP_VERSION} gmp;                                      \
+	fi
+
+gmp : $(GMP_LIB)
+
+$(GMP_LIB): $(GMP_TIMESTAMP)
+	@REFRESH=0;                                                                \
+	if [ ! -e ${GMP_TIMESTAMP_INT} ] ; then                                    \
+		REFRESH=1;                                                         \
+	fi;                                                                        \
+	if [ ! -e ${GMP_LIB} ] ; then                                              \
+		REFRESH=1;                                                         \
+	fi;                                                                        \
+	if [ ${GMP_TIMESTAMP} -nt ${GMP_TIMESTAMP_INT} ] ; then                    \
+		REFRESH=1;                                                         \
+	fi;                                                                        \
+	if [ $$REFRESH -ne 0 ] ; then                                              \
+	mkdir -p ${GMP_DIR};                                                       \
+	export PATH="$${PATH}:${SDKFOLDER}/platform-tools:${ANDROID_NDK}";         \
+	echo "changed timestamp for gmp detected building...";                     \
+	cd deps/gmp-${GMP_VERSION};                                                \
+	export CROSS_PREFIX=${CROSS_PREFIX};                                       \
+	export TOOLCHAIN=/tmp/ndk-${TARGET_HOST}-gmp;                              \
+	${ANDROID_NDK}/build/tools/make-standalone-toolchain.sh                    \
+	--toolchain=${TARGET_TOOLCHAIN}${COMPILER_VERSION}                         \
+	--install-dir=$${TOOLCHAIN};                                               \
+	export PATH="$${TOOLCHAIN}/bin:$${PATH}";                                  \
+	export CC=${CROSS_PREFIX}gcc;                                              \
+	export CXX=${CROSS_PREFIX}g++;                                             \
+	export LIBGMP_LDFLAGS="-avoid-version";                                    \
+	export LIBGMPXX_LDFLAGS="-avoid-version";                                  \
+	./configure --disable-static --host=${TARGET_HOST} --prefix=/usr;          \
+	$(MAKE) install DESTDIR=/${GMP_DIR} || exit 1;                             \
+	touch ${GMP_TIMESTAMP};                                                    \
+	touch ${GMP_TIMESTAMP_INT};                                                \
+	$(RM) -rf $${TOOLCHAIN};                                                   \
+	else                                                                       \
+		echo "nothing to be done for gmp";                                 \
+	fi
+
+clean_gmp:
+	$(RM) -rf deps/gmp-${GMP_VERSION}                                          \
+	$(RM) -f deps/gmp
+
 sqlite3_download: deps/${SQLITE3_FOLDER}/sqlite3.c
 
 deps/${SQLITE3_FOLDER}/sqlite3.c :
@@ -559,54 +689,21 @@ deps/${SQLITE3_FOLDER}/sqlite3.c :
 	wget ${SQLITE3_URL};                                                        \
 	unzip ${SQLITE3_FOLDER}.zip;                                                \
 	ln -s ${SQLITE3_FOLDER} sqlite
-	
+
 clean_sqlite3:
 	cd deps && $(RM) -rf ${SQLITE3_FOLDER} && $(RM) -f ${SQLITE3_FOLDER}.zip && \
 	$(RM) -f sqlite
 
 $(ASSETS_TIMESTAMP) : $(IRRLICHT_LIB)
 	@mkdir -p ${ROOT}/deps;                                                     \
-	LAST_MODIF=$$(find ${ROOT}/../../builtin -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../builtin/timestamp;                                 \
-		touch ${ASSETS_TIMESTAMP};                                             \
-		echo builtin changed $$LAST_MODIF;                                     \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../client -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../client/timestamp;                                  \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../doc -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../doc/timestamp;                                     \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../fonts -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../fonts/timestamp;                                   \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../games -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../games/timestamp;                                   \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../mods -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../mods/timestamp;                                    \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../po -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../po/timestamp;                                      \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
-	LAST_MODIF=$$(find ${ROOT}/../../textures -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
-	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
-		touch ${ROOT}/../../textures/timestamp;                                \
-		touch ${ASSETS_TIMESTAMP};                                             \
-	fi;                                                                        \
+	for DIRNAME in {builtin,client,doc,fonts,games,mods,po,textures}; do        \
+		LAST_MODIF=$$(find ${ROOT}/../../${DIRNAME} -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
+		if [ $$(basename $$LAST_MODIF) != "timestamp" ]; then               \
+			touch ${ROOT}/../../$DIRNAME/timestamp;                     \
+			touch ${ASSETS_TIMESTAMP};                                  \
+			echo ${DIRNAME} changed $$LAST_MODIF;                       \
+		fi;                                                                 \
+	done;                                                                       \
 	LAST_MODIF=$$(find ${IRRLICHT_DIR}/media -type f -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" "); \
 	if [ $$(basename $$LAST_MODIF) != "timestamp" ] ; then                     \
 		touch ${IRRLICHT_DIR}/media/timestamp;                                 \
@@ -622,7 +719,7 @@ $(ASSETS_TIMESTAMP) : $(IRRLICHT_LIB)
 	if [ ! -e $(ASSETS_TIMESTAMP) ] ; then                                     \
 		touch $(ASSETS_TIMESTAMP);                                             \
 	fi
-	
+
 assets : $(ASSETS_TIMESTAMP)
 	@REFRESH=0;                                                                \
 	if [ ! -e ${ASSETS_TIMESTAMP}.old ] ; then                                 \
@@ -670,8 +767,8 @@ assets : $(ASSETS_TIMESTAMP)
 
 clean_assets :
 	@$(RM) -r assets
-	
-apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(LEVELDB_TARGET)       \
+
+apk: $(PATHCFGFILE) assets $(ICONV_LIB) $(IRRLICHT_LIB) $(CURL_LIB) $(GMP_LIB) $(LEVELDB_TARGET)       \
 	$(OPENAL_LIB) $(OGG_LIB) prep_srcdir $(ROOT)/jni/src/android_version.h     \
 	sqlite3_download
 	@export NDEBUG=$$NDEBUG; $(MAKE) manifest;                                 \
@@ -689,32 +786,32 @@ apk: $(PATHCFGFILE) assets $(IRRLICHT_LIB) $(CURL_LIB) $(LEVELDB_TARGET)       \
 	echo "++ Success!" &&                                                      \
 	echo "APK: bin/Minetest-$$BUILD_TYPE.apk" &&                               \
 	echo "You can install it with \`adb install -r bin/Minetest-$$BUILD_TYPE.apk\`"
-	
+
 prep_srcdir :
 	@rm ${ROOT}/jni/src;                                                       \
 	ln -s ${ROOT}/../../src ${ROOT}/jni/src
-	
+
 clean_apk : manifest
 	@export PATH=$$PATH:${SDKFOLDER}platform-tools:${ANDROID_NDK};             \
 	export ANDROID_HOME=${SDKFOLDER};                                          \
 	ant clean
-	
-install_debug : 
+
+install_debug :
 	@export PATH=$$PATH:${SDKFOLDER}platform-tools:${ANDROID_NDK};             \
 	adb install -r ${ROOT}/bin/Minetest-debug.apk
-	
+
 install :
 	@export PATH=$$PATH:${SDKFOLDER}platform-tools:${ANDROID_NDK};             \
 	adb install -r ${ROOT}/bin/Minetest-release.apk
-	
+
 envpaths :
 	@echo "export PATH=$$PATH:${SDKFOLDER}platform-tools:${ANDROID_NDK}" > and_env;\
 	echo "export ANDROID_HOME=${SDKFOLDER}" >> and_env;
-	
-clean_all : 
+
+clean_all :
 	@$(MAKE) clean_apk;                                                        \
-	$(MAKE) clean_assets clean_irrlicht clean_leveldb clean_curl clean_openssl \
-	clean_openal clean_ogg clean_manifest;                                     \
+	$(MAKE) clean_assets clean_iconv clean_irrlicht clean_leveldb clean_curl clean_openssl \
+	clean_openal clean_ogg clean_gmp clean_manifest;                           \
 	sleep 1;                                                                   \
 	$(RM) -r gen libs obj deps bin Debug and_env
 
@@ -762,7 +859,7 @@ manifest :
 	sed s/###BASE_VERSION###/$$BASE_VERSION/g |                                \
 	sed -e "s@###DEBUG_BUILD###@$$DBG@g" |                                     \
 	sed -e "s@###DEBUG_FLAG###@$$DBG_FLAG@g" >${ROOT}/AndroidManifest.xml
-	
+
 clean_manifest :
 	rm -rf ${ROOT}/AndroidManifest.xml
 

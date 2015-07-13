@@ -128,8 +128,6 @@ struct CraftReplacements
 		pairs(pairs_)
 	{}
 	std::string dump() const;
-	void serialize(std::ostream &os) const;
-	void deSerialize(std::istream &is);
 };
 
 /*
@@ -140,9 +138,6 @@ class CraftDefinition
 public:
 	CraftDefinition(){}
 	virtual ~CraftDefinition(){}
-
-	void serialize(std::ostream &os) const;
-	static CraftDefinition* deSerialize(std::istream &is);
 
 	// Returns type of crafting definition
 	virtual std::string getName() const=0;
@@ -155,7 +150,8 @@ public:
 	// the inverse of the above
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const=0;
 	// Decreases count of every input item
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const=0;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const=0;
 
 	virtual CraftHashType getHashType() const = 0;
 	virtual u64 getHash(CraftHashType type) const = 0;
@@ -164,9 +160,6 @@ public:
 	virtual void initHash(IGameDef *gamedef) = 0;
 
 	virtual std::string dump() const=0;
-protected:
-	virtual void serializeBody(std::ostream &os) const=0;
-	virtual void deSerializeBody(std::istream &is, int version)=0;
 };
 
 /*
@@ -195,7 +188,8 @@ public:
 	virtual bool check(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftOutput getOutput(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const;
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const;
 
 	virtual CraftHashType getHashType() const;
 	virtual u64 getHash(CraftHashType type) const;
@@ -203,10 +197,6 @@ public:
 	virtual void initHash(IGameDef *gamedef);
 
 	virtual std::string dump() const;
-
-protected:
-	virtual void serializeBody(std::ostream &os) const;
-	virtual void deSerializeBody(std::istream &is, int version);
 
 private:
 	// Output itemstring
@@ -247,7 +237,8 @@ public:
 	virtual bool check(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftOutput getOutput(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const;
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const;
 
 	virtual CraftHashType getHashType() const;
 	virtual u64 getHash(CraftHashType type) const;
@@ -255,10 +246,6 @@ public:
 	virtual void initHash(IGameDef *gamedef);
 
 	virtual std::string dump() const;
-
-protected:
-	virtual void serializeBody(std::ostream &os) const;
-	virtual void deSerializeBody(std::istream &is, int version);
 
 private:
 	// Output itemstring
@@ -294,7 +281,8 @@ public:
 	virtual bool check(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftOutput getOutput(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const;
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const;
 
 	virtual CraftHashType getHashType() const { return CRAFT_HASH_TYPE_COUNT; }
 	virtual u64 getHash(CraftHashType type) const { return 2; }
@@ -302,10 +290,6 @@ public:
 	virtual void initHash(IGameDef *gamedef) {}
 
 	virtual std::string dump() const;
-
-protected:
-	virtual void serializeBody(std::ostream &os) const;
-	virtual void deSerializeBody(std::istream &is, int version);
 
 private:
 	// This is a constant that is added to the wear of the result.
@@ -340,7 +324,8 @@ public:
 	virtual bool check(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftOutput getOutput(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const;
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const;
 
 	virtual CraftHashType getHashType() const;
 	virtual u64 getHash(CraftHashType type) const;
@@ -348,10 +333,6 @@ public:
 	virtual void initHash(IGameDef *gamedef);
 
 	virtual std::string dump() const;
-
-protected:
-	virtual void serializeBody(std::ostream &os) const;
-	virtual void deSerializeBody(std::istream &is, int version);
 
 private:
 	// Output itemstring
@@ -389,7 +370,8 @@ public:
 	virtual bool check(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftOutput getOutput(const CraftInput &input, IGameDef *gamedef) const;
 	virtual CraftInput getInput(const CraftOutput &output, IGameDef *gamedef) const;
-	virtual void decrementInput(CraftInput &input, IGameDef *gamedef) const;
+	virtual void decrementInput(CraftInput &input,
+		std::vector<ItemStack> &output_replacements, IGameDef *gamedef) const;
 
 	virtual CraftHashType getHashType() const;
 	virtual u64 getHash(CraftHashType type) const;
@@ -397,10 +379,6 @@ public:
 	virtual void initHash(IGameDef *gamedef);
 
 	virtual std::string dump() const;
-
-protected:
-	virtual void serializeBody(std::ostream &os) const;
-	virtual void deSerializeBody(std::istream &is, int version);
 
 private:
 	// Recipe itemstring
@@ -426,10 +404,11 @@ public:
 
 	// The main crafting function
 	virtual bool getCraftResult(CraftInput &input, CraftOutput &output,
+			std::vector<ItemStack> &output_replacements,
 			bool decrementInput, IGameDef *gamedef) const=0;
 	virtual std::vector<CraftDefinition*> getCraftRecipes(CraftOutput &output,
 			IGameDef *gamedef, unsigned limit=0) const=0;
-	
+
 	// Print crafting recipes for debugging
 	virtual std::string dump() const=0;
 };
@@ -442,8 +421,9 @@ public:
 
 	// The main crafting function
 	virtual bool getCraftResult(CraftInput &input, CraftOutput &output,
+			std::vector<ItemStack> &output_replacements,
 			bool decrementInput, IGameDef *gamedef) const=0;
-	virtual std::vector<CraftDefinition*> getCraftRecipes(CraftOutput &output, 
+	virtual std::vector<CraftDefinition*> getCraftRecipes(CraftOutput &output,
 			IGameDef *gamedef, unsigned limit=0) const=0;
 
 	// Print crafting recipes for debugging

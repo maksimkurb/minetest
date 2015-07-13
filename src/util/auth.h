@@ -1,6 +1,6 @@
 /*
 Minetest
-Copyright (C) 2013 celeron55, Perttu Ahola <celeron55@gmail.com>
+Copyright (C) 2015 est31 <MTest31@outlook.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU Lesser General Public License as published by
@@ -17,10 +17,21 @@ with this program; if not, write to the Free Software Foundation, Inc.,
 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
-#ifndef TEST_HEADER
-#define TEST_HEADER
+#ifndef AUTH_H
+#define AUTH_H
 
-void run_tests();
+std::string translatePassword(const std::string &name,
+	const std::string &password);
+void getSRPVerifier(const std::string &name,
+	const std::string &password, char **salt, size_t *salt_len,
+	char **bytes_v, size_t *len_v);
+std::string getSRPVerifier(const std::string &name,
+	const std::string &password);
+std::string getSRPVerifier(const std::string &name,
+	const std::string &password, const std::string &salt);
+std::string encodeSRPVerifier(const std::string &verifier,
+	const std::string &salt);
+bool decodeSRPVerifier(const std::string &enc_pwd,
+	std::string *salt, std::string *bytes_v);
 
 #endif
-

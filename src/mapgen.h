@@ -70,6 +70,13 @@ enum GenNotifyType {
 	NUM_GENNOTIFY_TYPES
 };
 
+// TODO(hmmmm/paramat): make stone type selection dynamic
+enum MgStoneType {
+	STONE,
+	DESERT_STONE,
+	SANDSTONE,
+};
+
 struct GenNotifyEvent {
 	GenNotifyType type;
 	v3s16 pos;
@@ -108,7 +115,9 @@ struct MapgenParams {
 	u32 flags;
 
 	NoiseParams np_biome_heat;
+	NoiseParams np_biome_heat_blend;
 	NoiseParams np_biome_humidity;
+	NoiseParams np_biome_humidity_blend;
 
 	MapgenSpecificParams *sparams;
 
@@ -118,8 +127,10 @@ struct MapgenParams {
 		seed(0),
 		water_level(1),
 		flags(MG_TREES | MG_CAVES | MG_LIGHT),
-		np_biome_heat(NoiseParams(50, 50, v3f(500.0, 500.0, 500.0), 5349, 3, 0.5, 2.0)),
-		np_biome_humidity(NoiseParams(50, 50, v3f(500.0, 500.0, 500.0), 842, 3, 0.5, 2.0)),
+		np_biome_heat(NoiseParams(50, 50, v3f(1000.0, 1000.0, 1000.0), 5349, 3, 0.5, 2.0)),
+		np_biome_heat_blend(NoiseParams(0, 1.5, v3f(8.0, 8.0, 8.0), 13, 2, 1.0, 2.0)),
+		np_biome_humidity(NoiseParams(50, 50, v3f(1000.0, 1000.0, 1000.0), 842, 3, 0.5, 2.0)),
+		np_biome_humidity_blend(NoiseParams(0, 1.5, v3f(8.0, 8.0, 8.0), 90003, 2, 1.0, 2.0)),
 		sparams(NULL)
 	{}
 
@@ -141,6 +152,8 @@ public:
 	u32 blockseed;
 	s16 *heightmap;
 	u8 *biomemap;
+	float *heatmap;
+	float *humidmap;
 	v3s16 csize;
 
 	GenerateNotifier gennotify;
@@ -177,69 +190,6 @@ struct MapgenFactory {
 		EmergeManager *emerge) = 0;
 	virtual MapgenSpecificParams *createMapgenParams() = 0;
 	virtual ~MapgenFactory() {}
-};
-
-typedef std::map<std::string, std::string> StringMap;
-typedef u32 ObjDefHandle;
-
-#define OBJDEF_INVALID_INDEX ((u32)(-1))
-#define OBJDEF_INVALID_HANDLE 0
-#define OBJDEF_HANDLE_SALT 0x00585e6fu
-#define OBJDEF_MAX_ITEMS (1 << 18)
-#define OBJDEF_UID_MASK ((1 << 7) - 1)
-
-enum ObjDefType {
-	OBJDEF_GENERIC,
-	OBJDEF_BIOME,
-	OBJDEF_ORE,
-	OBJDEF_DECORATION,
-	OBJDEF_SCHEMATIC,
-};
-
-class ObjDef {
-public:
-	virtual ~ObjDef() {}
-
-	u32 index;
-	u32 uid;
-	ObjDefHandle handle;
-	std::string name;
-};
-
-class ObjDefManager {
-public:
-	ObjDefManager(IGameDef *gamedef, ObjDefType type);
-	virtual ~ObjDefManager();
-
-	virtual const char *getObjectTitle() const = 0;
-
-	virtual void clear();
-	virtual ObjDef *getByName(const std::string &name) const;
-
-	//// Add new/get/set object definitions by handle
-	virtual ObjDefHandle add(ObjDef *obj);
-	virtual ObjDef *get(ObjDefHandle handle) const;
-	virtual ObjDef *set(ObjDefHandle handle, ObjDef *obj);
-
-	//// Raw variants that work on indexes
-	virtual u32 addRaw(ObjDef *obj);
-
-	// It is generally assumed that getRaw() will always return a valid object
-	// This won't be true if people do odd things such as call setRaw() with NULL
-	virtual ObjDef *getRaw(u32 index) const;
-	virtual ObjDef *setRaw(u32 index, ObjDef *obj);
-
-	INodeDefManager *getNodeDef() const { return m_ndef; }
-
-	u32 validateHandle(ObjDefHandle handle) const;
-	static ObjDefHandle createHandle(u32 index, ObjDefType type, u32 uid);
-	static bool decodeHandle(ObjDefHandle handle, u32 *index,
-		ObjDefType *type, u32 *uid);
-
-protected:
-	INodeDefManager *m_ndef;
-	std::vector<ObjDef *> m_objects;
-	ObjDefType m_objtype;
 };
 
 #endif

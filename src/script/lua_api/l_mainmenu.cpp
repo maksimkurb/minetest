@@ -210,7 +210,7 @@ int ModApiMainMenu::l_get_table_index(lua_State *L)
 	GUIEngine* engine = getGuiEngine(L);
 	sanity_check(engine != NULL);
 
-	std::wstring tablename(narrow_to_wide(luaL_checkstring(L, 1)));
+	std::string tablename(luaL_checkstring(L, 1));
 	GUITable *table = engine->m_menu->getTable(tablename);
 	s32 selection = table ? table->getSelected() : 0;
 
@@ -754,30 +754,6 @@ int ModApiMainMenu::l_get_texturepath_share(lua_State *L)
 }
 
 /******************************************************************************/
-int ModApiMainMenu::l_get_dirlist(lua_State *L)
-{
-	const char *path	= luaL_checkstring(L, 1);
-	bool dironly		= lua_toboolean(L, 2);
-
-	std::vector<fs::DirListNode> dirlist = fs::GetDirListing(path);
-
-	unsigned int index = 1;
-	lua_newtable(L);
-	int table = lua_gettop(L);
-
-	for (unsigned int i=0;i< dirlist.size(); i++) {
-		if ((dirlist[i].dir) || (dironly == false)) {
-			lua_pushnumber(L,index);
-			lua_pushstring(L,dirlist[i].name.c_str());
-			lua_settable(L, table);
-			index++;
-		}
-	}
-
-	return 1;
-}
-
-/******************************************************************************/
 int ModApiMainMenu::l_create_dir(lua_State *L) {
 	const char *path	= luaL_checkstring(L, 1);
 
@@ -1081,7 +1057,7 @@ int ModApiMainMenu::l_get_video_modes(lua_State *L)
 int ModApiMainMenu::l_gettext(lua_State *L)
 {
 	std::wstring wtext = wstrgettext((std::string) luaL_checkstring(L, 1));
-	lua_pushstring(L, wide_to_narrow(wtext).c_str());
+	lua_pushstring(L, wide_to_utf8(wtext).c_str());
 
 	return 1;
 }
@@ -1170,7 +1146,6 @@ void ModApiMainMenu::Initialize(lua_State *L, int top)
 	API_FCT(get_gamepath);
 	API_FCT(get_texturepath);
 	API_FCT(get_texturepath_share);
-	API_FCT(get_dirlist);
 	API_FCT(create_dir);
 	API_FCT(delete_dir);
 	API_FCT(copy_dir);
@@ -1204,7 +1179,6 @@ void ModApiMainMenu::InitializeAsync(AsyncEngine& engine)
 	ASYNC_API_FCT(get_gamepath);
 	ASYNC_API_FCT(get_texturepath);
 	ASYNC_API_FCT(get_texturepath_share);
-	ASYNC_API_FCT(get_dirlist);
 	ASYNC_API_FCT(create_dir);
 	ASYNC_API_FCT(delete_dir);
 	ASYNC_API_FCT(copy_dir);

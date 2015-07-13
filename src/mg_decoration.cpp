@@ -61,16 +61,6 @@ size_t DecorationManager::placeAllDecos(Mapgen *mg, u32 blockseed,
 }
 
 
-void DecorationManager::clear()
-{
-	for (size_t i = 0; i < m_objects.size(); i++) {
-		Decoration *deco = (Decoration *)m_objects[i];
-		delete deco;
-	}
-	m_objects.clear();
-}
-
-
 ///////////////////////////////////////////////////////////////////////////////
 
 
@@ -88,9 +78,9 @@ Decoration::~Decoration()
 }
 
 
-void Decoration::resolveNodeNames(NodeResolveInfo *nri)
+void Decoration::resolveNodeNames()
 {
-	m_ndef->getIdsFromResolveInfo(nri, c_place_on);
+	getIdsFromNrBacklog(&c_place_on);
 }
 
 
@@ -139,7 +129,6 @@ size_t Decoration::placeDeco(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 			s16 y = mg->heightmap ?
 					mg->heightmap[mapindex] :
 					mg->findGroundLevel(v2s16(x, z), nmin.Y, nmax.Y);
-			y = MYMAX(y, mg->water_level);
 
 			if (y < nmin.Y || y > nmax.Y ||
 				y < y_min  || y > y_max)
@@ -232,11 +221,11 @@ void Decoration::placeCutoffs(Mapgen *mg, u32 blockseed, v3s16 nmin, v3s16 nmax)
 ///////////////////////////////////////////////////////////////////////////////
 
 
-void DecoSimple::resolveNodeNames(NodeResolveInfo *nri)
+void DecoSimple::resolveNodeNames()
 {
-	Decoration::resolveNodeNames(nri);
-	m_ndef->getIdsFromResolveInfo(nri, c_decos);
-	m_ndef->getIdsFromResolveInfo(nri, c_spawnby);
+	Decoration::resolveNodeNames();
+	getIdsFromNrBacklog(&c_decos);
+	getIdsFromNrBacklog(&c_spawnby);
 }
 
 
@@ -257,7 +246,7 @@ bool DecoSimple::canPlaceDecoration(MMVManip *vm, v3s16 p)
 		return true;
 
 	int nneighs = 0;
-	v3s16 dirs[8] = {
+	v3s16 dirs[16] = {
 		v3s16( 0, 0,  1),
 		v3s16( 0, 0, -1),
 		v3s16( 1, 0,  0),
@@ -265,7 +254,16 @@ bool DecoSimple::canPlaceDecoration(MMVManip *vm, v3s16 p)
 		v3s16( 1, 0,  1),
 		v3s16(-1, 0,  1),
 		v3s16(-1, 0, -1),
-		v3s16( 1, 0, -1)
+		v3s16( 1, 0, -1),
+
+		v3s16( 0, 1,  1),
+		v3s16( 0, 1, -1),
+		v3s16( 1, 1,  0),
+		v3s16(-1, 1,  0),
+		v3s16( 1, 1,  1),
+		v3s16(-1, 1,  1),
+		v3s16(-1, 1, -1),
+		v3s16( 1, 1, -1)
 	};
 
 	// Check a Moore neighborhood if there are enough spawnby nodes
@@ -320,18 +318,17 @@ int DecoSimple::getHeight()
 ///////////////////////////////////////////////////////////////////////////////
 
 
+DecoSchematic::DecoSchematic()
+{
+	schematic = NULL;
+}
+
+
 size_t DecoSchematic::generate(MMVManip *vm, PseudoRandom *pr, v3s16 p)
 {
-	if (flags & DECO_PLACE_CENTER_X)
-		p.X -= (schematic->size.X + 1) / 2;
-	if (flags & DECO_PLACE_CENTER_Y)
-		p.Y -= (schematic->size.Y + 1) / 2;
-	if (flags & DECO_PLACE_CENTER_Z)
-		p.Z -= (schematic->size.Z + 1) / 2;
-
-	bool force_placement = (flags & DECO_FORCE_PLACEMENT);
-
-	if (!vm->m_area.contains(p))
+	// Schematic could have been unloaded but not the decoration
+	// In this case generate() does nothing (but doesn't *fail*)
+	if (schematic == NULL)
 		return 0;
 
 	u32 vi = vm->m_area.index(p);
@@ -339,10 +336,19 @@ size_t DecoSchematic::generate(MMVManip *vm, PseudoRandom *pr, v3s16 p)
 	if (!CONTAINS(c_place_on, c))
 		return 0;
 
+	if (flags & DECO_PLACE_CENTER_X)
+		p.X -= (schematic->size.X - 1) / 2;
+	if (flags & DECO_PLACE_CENTER_Y)
+		p.Y -= (schematic->size.Y - 1) / 2;
+	if (flags & DECO_PLACE_CENTER_Z)
+		p.Z -= (schematic->size.Z - 1) / 2;
+
 	Rotation rot = (rotation == ROTATE_RAND) ?
 		(Rotation)pr->range(ROTATE_0, ROTATE_270) : rotation;
 
-	schematic->blitToVManip(p, vm, rot, force_placement, m_ndef);
+	bool force_placement = (flags & DECO_FORCE_PLACEMENT);
+
+	schematic->blitToVManip(p, vm, rot, force_placement);
 
 	return 1;
 }
